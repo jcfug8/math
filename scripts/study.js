@@ -9,7 +9,7 @@ const Study = {
     <div class="study-page">
       <a href="index.html" class="back-link">← Back to Study Sessions</a>
       <div v-if="loading" class="loading">Loading study session...</div>
-      <div v-else-if="session && session.studySets.length > 0" class="study-container">
+      <div v-else-if="session && (session.problemSets || session.problemSets).length > 0" class="study-container">
         <div class="problem-container">
           <div class="progress-indicator">
             <span v-if="streak > 0" class="streak-counter">
@@ -75,7 +75,7 @@ const Study = {
             :problem="currentProblem"
             :format="currentProblem ? currentProblem.format : session.format"
             :displayFormat="currentProblem ? currentProblem.displayFormat : session.displayFormat"
-            :decimalPrecision="currentProblem && currentProblem.studySet && currentProblem.studySet.operation === '/' ? (currentProblem.studySet.decimalPrecision || 2) : 2"
+            :decimalPrecision="currentProblem && currentProblem.problemSet && currentProblem.problemSet.operation === '/' ? (currentProblem.problemSet.decimalPrecision || 2) : 2"
             @answer-submitted="handleAnswer"
           />
           
@@ -85,7 +85,7 @@ const Study = {
           
         </div>
       </div>
-      <div v-else-if="session && session.studySets.length === 0" class="error">
+      <div v-else-if="session && (session.problemSets || session.problemSets).length === 0" class="error">
         No problem sets configured. Please go back and add at least one problem set.
       </div>
       <div v-else class="error">Study session not found</div>
@@ -263,7 +263,7 @@ const Study = {
       }
       return true;
     },
-    generateAllPossibleProblems(studySet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup) {
+    generateAllPossibleProblems(problemSet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup) {
       const problems = [];
       const seenProblems = new Set();
       
@@ -283,27 +283,27 @@ const Study = {
         return combinations;
       };
       
-      // Get all number ranges for this study set
-      if (!studySet.numberRanges) {
-        const min = studySet.minValue !== undefined ? studySet.minValue : 0;
-        const max = studySet.maxValue !== undefined ? studySet.maxValue : 10;
-        studySet.numberRanges = Array(studySet.numberCount).fill(null).map(() => ({ min, max }));
+      // Get all number ranges for this problem set
+      if (!problemSet.numberRanges) {
+        const min = problemSet.minValue !== undefined ? problemSet.minValue : 0;
+        const max = problemSet.maxValue !== undefined ? problemSet.maxValue : 10;
+        problemSet.numberRanges = Array(problemSet.numberCount).fill(null).map(() => ({ min, max }));
       }
       
       // Generate all possible number combinations
       let numberCombinations;
-      if (studySet.operation === '/') {
+      if (problemSet.operation === '/') {
         // For division, we need to handle it differently
         // Generate divisors first (avoiding zero), then generate dividends
-        const divisorRanges = studySet.numberRanges.slice(1);
+        const divisorRanges = problemSet.numberRanges.slice(1);
         const divisorCombinations = generateCombinations(divisorRanges, 0, []);
         
         numberCombinations = [];
         for (const divisors of divisorCombinations) {
           const divisorProduct = divisors.reduce((a, b) => a * b, 1);
-          const firstRange = studySet.numberRanges[0];
+          const firstRange = problemSet.numberRanges[0];
           
-          if (studySet.allowDecimalAnswers) {
+          if (problemSet.allowDecimalAnswers) {
             // Allow all combinations, including those that result in decimals
             for (let dividend = firstRange.min; dividend <= firstRange.max; dividend++) {
               // Skip division by zero
@@ -321,10 +321,10 @@ const Study = {
             }
           }
         }
-      } else if (studySet.operation === '-') {
+      } else if (problemSet.operation === '-') {
         // For subtraction, filter out negative results if not allowed
-        const allCombinations = generateCombinations(studySet.numberRanges, 0, []);
-        if (studySet.allowNegative) {
+        const allCombinations = generateCombinations(problemSet.numberRanges, 0, []);
+        if (problemSet.allowNegative) {
           numberCombinations = allCombinations;
         } else {
           // Filter to only include combinations where result is non-negative
@@ -335,7 +335,7 @@ const Study = {
         }
       } else {
         // For other operations (addition, multiplication), generate all combinations
-        numberCombinations = generateCombinations(studySet.numberRanges, 0, []);
+        numberCombinations = generateCombinations(problemSet.numberRanges, 0, []);
       }
       
       // Convert each combination to a problem
@@ -346,7 +346,7 @@ const Study = {
         let answer;
         let expression;
         
-        switch (studySet.operation) {
+        switch (problemSet.operation) {
           case '+':
             answer = numbers.reduce((a, b) => a + b, 0);
             expression = numbers.join(' + ');
@@ -371,61 +371,62 @@ const Study = {
         if (!seenProblems.has(problemKey)) {
           seenProblems.add(problemKey);
           
-          // Determine format for this problem if "both" mode
-          let problemFormat = this.session.format;
-          if (this.session.format === 'both') {
-            // Alternate in groups of 2
-            if (formatCounter % 4 < 2) {
-              problemFormat = currentFormatGroup;
-            } else {
-              problemFormat = currentFormatGroup === 'fill-in-blank' ? 'multiple-choice' : 'fill-in-blank';
-            }
-            formatCounter++;
-          }
-          
-          // Determine display format for this problem if "both" mode
-          let problemDisplayFormat = this.session.displayFormat;
-          if (this.session.displayFormat === 'both') {
-            // Alternate in groups of 2
-            if (displayFormatCounter % 4 < 2) {
-              problemDisplayFormat = currentDisplayFormatGroup;
-            } else {
-              problemDisplayFormat = currentDisplayFormatGroup === 'side-by-side' ? 'stacked' : 'side-by-side';
-            }
-            displayFormatCounter++;
-          }
-          
-          // Generate wrong answers for multiple choice
-          const wrongAnswers = [];
-          if (problemFormat === 'multiple-choice') {
-            for (let j = 0; j < 3; j++) {
-              let wrong;
-              do {
-                wrong = answer + Math.floor(Math.random() * 20) - 10;
-              } while (wrong === answer || wrongAnswers.includes(wrong));
-              wrongAnswers.push(wrong);
-            }
-          }
-          
-          // Round answer based on decimal precision setting (for division) or default to 2 decimals
-          let roundedAnswer = answer;
-          if (studySet.operation === '/' && studySet.allowDecimalAnswers) {
-            const precision = Math.pow(10, studySet.decimalPrecision || 2);
-            roundedAnswer = Math.round(answer * precision) / precision;
-          } else {
-            roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
-          }
-          
-          const problem = {
-            expression,
-            answer: roundedAnswer,
-            wrongAnswers,
-            format: problemFormat,
-            displayFormat: problemDisplayFormat,
-            numbers: numbers, // Store numbers for stacked display
-            operation: studySet.operation, // Store operation for stacked display
-            studySet
-          };
+              // Determine format for this problem if "both" mode
+              let problemFormat = this.session.format;
+              if (this.session.format === 'both') {
+                // Alternate in groups of 2
+                if (formatCounter % 4 < 2) {
+                  problemFormat = currentFormatGroup;
+                } else {
+                  problemFormat = currentFormatGroup === 'fill-in-blank' ? 'multiple-choice' : 'fill-in-blank';
+                }
+                formatCounter++;
+              }
+              
+              // Determine display format for this problem if "both" mode
+              let problemDisplayFormat = this.session.displayFormat;
+              if (this.session.displayFormat === 'both') {
+                // Alternate in groups of 2
+                if (displayFormatCounter % 4 < 2) {
+                  problemDisplayFormat = currentDisplayFormatGroup;
+                } else {
+                  problemDisplayFormat = currentDisplayFormatGroup === 'side-by-side' ? 'stacked' : 'side-by-side';
+                }
+                displayFormatCounter++;
+              }
+              
+              // Generate wrong answers for multiple choice
+              const wrongAnswers = [];
+              if (problemFormat === 'multiple-choice') {
+                for (let j = 0; j < 3; j++) {
+                  let wrong;
+                  do {
+                    wrong = answer + Math.floor(Math.random() * 20) - 10;
+                  } while (wrong === answer || wrongAnswers.includes(wrong));
+                  wrongAnswers.push(wrong);
+                }
+              }
+              
+              // Round answer based on decimal precision setting (for division) or default to 2 decimals
+              let roundedAnswer = answer;
+              if (problemSet.operation === '/' && problemSet.allowDecimalAnswers) {
+                const precision = Math.pow(10, problemSet.decimalPrecision || 2);
+                roundedAnswer = Math.round(answer * precision) / precision;
+              } else {
+                roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
+              }
+              
+              const problem = {
+                expression,
+                answer: roundedAnswer,
+                wrongAnswers,
+                format: problemFormat,
+                displayFormat: problemDisplayFormat,
+                numbers: numbers, // Store numbers for stacked display
+                operation: problemSet.operation, // Store operation for stacked display
+                problemSet: problemSet,
+                problemSet: problemSet // Keep for backward compatibility
+              };
           
           problems.push(problem);
         }
@@ -453,9 +454,10 @@ const Study = {
       }
       
       if (this.session.problemCount === 'all') {
-        // Generate all possible unique problems for each study set
-        for (const studySet of this.session.studySets) {
-          const result = this.generateAllPossibleProblems(studySet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup);
+        // Generate all possible unique problems for each problem set
+        const problemSets = this.session.problemSets || this.session.problemSets || [];
+        for (const problemSet of problemSets) {
+          const result = this.generateAllPossibleProblems(problemSet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup);
           this.problems.push(...result.problems);
           formatCounter = result.formatCounter;
           displayFormatCounter = result.displayFormatCounter;
@@ -495,26 +497,27 @@ const Study = {
       this.emojiJustChanged = false; // Reset emoji animation flag
     },
     generateProblemInternal(problemFormat = null, problemDisplayFormat = null) {
-      // Select a random study set
-      const studySet = this.session.studySets[
-        Math.floor(Math.random() * this.session.studySets.length)
+      // Select a random problem set
+      const problemSets = this.session.problemSets || this.session.problemSets || [];
+      const problemSet = problemSets[
+        Math.floor(Math.random() * problemSets.length)
       ];
       
-      // Generate numbers based on study set configuration
+      // Generate numbers based on problem set configuration
       const numbers = [];
       
       // Ensure numberRanges exists and matches numberCount
-      if (!studySet.numberRanges) {
+      if (!problemSet.numberRanges) {
         // Fallback for old format
-        const min = studySet.minValue !== undefined ? studySet.minValue : 0;
-        const max = studySet.maxValue !== undefined ? studySet.maxValue : 10;
-        studySet.numberRanges = Array(studySet.numberCount).fill(null).map(() => ({ min, max }));
+        const min = problemSet.minValue !== undefined ? problemSet.minValue : 0;
+        const max = problemSet.maxValue !== undefined ? problemSet.maxValue : 10;
+        problemSet.numberRanges = Array(problemSet.numberCount).fill(null).map(() => ({ min, max }));
       }
       
-      if (studySet.operation === '/') {
+      if (problemSet.operation === '/') {
         // For division, generate divisors first (avoiding zero)
-        for (let i = 1; i < studySet.numberCount; i++) {
-          const range = studySet.numberRanges[i] || { min: 1, max: 10 };
+        for (let i = 1; i < problemSet.numberCount; i++) {
+          const range = problemSet.numberRanges[i] || { min: 1, max: 10 };
           const min = Math.max(1, range.min); // Avoid zero for divisors
           const max = range.max;
           const num = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -523,9 +526,9 @@ const Study = {
         // Calculate divisor product
         const divisorProduct = numbers.reduce((a, b) => a * b, 1);
         
-        if (studySet.allowDecimalAnswers) {
+        if (problemSet.allowDecimalAnswers) {
           // Allow any dividend, which may result in decimal answers
-          const firstRange = studySet.numberRanges[0] || { min: 0, max: 100 };
+          const firstRange = problemSet.numberRanges[0] || { min: 0, max: 100 };
           const min = firstRange.min;
           const max = firstRange.max;
           const dividend = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -535,7 +538,7 @@ const Study = {
           const dividendMultiplier = Math.max(1, Math.floor(Math.random() * 10) + 1);
           const dividend = divisorProduct * dividendMultiplier;
           // Ensure dividend is within range for first number
-          const firstRange = studySet.numberRanges[0] || { min: 0, max: 100 };
+          const firstRange = problemSet.numberRanges[0] || { min: 0, max: 100 };
           const minDividend = Math.max(firstRange.min, divisorProduct);
           const maxDividend = firstRange.max;
           if (dividend > maxDividend) {
@@ -546,13 +549,13 @@ const Study = {
             numbers.unshift(dividend);
           }
         }
-      } else if (studySet.operation === '-') {
+      } else if (problemSet.operation === '-') {
         // For subtraction, if negative answers are not allowed, ensure first number is large enough
-        if (!studySet.allowNegative) {
+        if (!problemSet.allowNegative) {
           // Generate numbers from right to left, ensuring result is non-negative
           // Start with the last number (smallest)
-          for (let i = studySet.numberCount - 1; i >= 1; i--) {
-            const range = studySet.numberRanges[i] || { min: 0, max: 10 };
+          for (let i = problemSet.numberCount - 1; i >= 1; i--) {
+            const range = problemSet.numberRanges[i] || { min: 0, max: 10 };
             const min = range.min;
             const max = range.max;
             const num = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -561,7 +564,7 @@ const Study = {
           // Calculate sum of all numbers after the first
           const sumOfRest = numbers.reduce((a, b) => a + b, 0);
           // Generate first number that's at least as large as sum of rest
-          const firstRange = studySet.numberRanges[0] || { min: 0, max: 10 };
+          const firstRange = problemSet.numberRanges[0] || { min: 0, max: 10 };
           const minFirst = Math.max(firstRange.min, sumOfRest);
           const maxFirst = firstRange.max;
           if (minFirst > maxFirst) {
@@ -570,8 +573,8 @@ const Study = {
             numbers = [];
             const firstNum = maxFirst;
             const remainingSum = Math.floor(maxFirst * 0.8); // Use 80% of max for remaining numbers
-            for (let i = 1; i < studySet.numberCount; i++) {
-              const range = studySet.numberRanges[i] || { min: 0, max: 10 };
+            for (let i = 1; i < problemSet.numberCount; i++) {
+              const range = problemSet.numberRanges[i] || { min: 0, max: 10 };
               const max = Math.min(range.max, remainingSum);
               const min = range.min;
               if (max >= min) {
@@ -588,8 +591,8 @@ const Study = {
           }
         } else {
           // Negative answers allowed, generate normally
-          for (let i = 0; i < studySet.numberCount; i++) {
-            const range = studySet.numberRanges[i] || { min: 0, max: 10 };
+          for (let i = 0; i < problemSet.numberCount; i++) {
+            const range = problemSet.numberRanges[i] || { min: 0, max: 10 };
             const min = range.min;
             const max = range.max;
             const num = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -598,8 +601,8 @@ const Study = {
         }
       } else {
         // For other operations (addition, multiplication), generate each number using its individual range
-        for (let i = 0; i < studySet.numberCount; i++) {
-          const range = studySet.numberRanges[i] || { min: 0, max: 10 };
+        for (let i = 0; i < problemSet.numberCount; i++) {
+          const range = problemSet.numberRanges[i] || { min: 0, max: 10 };
           const min = range.min;
           const max = range.max;
           const num = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -611,7 +614,7 @@ const Study = {
       let answer;
       let expression;
       
-      switch (studySet.operation) {
+      switch (problemSet.operation) {
         case '+':
           answer = numbers.reduce((a, b) => a + b, 0);
           expression = numbers.join(' + ');
@@ -657,8 +660,8 @@ const Study = {
       
       // Round answer based on decimal precision setting (for division) or default to 2 decimals
       let roundedAnswer = answer;
-      if (studySet.operation === '/' && studySet.allowDecimalAnswers) {
-        const precision = Math.pow(10, studySet.decimalPrecision || 2);
+      if (problemSet.operation === '/' && problemSet.allowDecimalAnswers) {
+        const precision = Math.pow(10, problemSet.decimalPrecision || 2);
         roundedAnswer = Math.round(answer * precision) / precision;
       } else {
         roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
@@ -671,8 +674,9 @@ const Study = {
         format: problemFormat, // Store the format assigned to this problem
         displayFormat: problemDisplayFormat, // Store the display format assigned to this problem
         numbers: numbers, // Store numbers for stacked display
-        operation: studySet.operation, // Store operation for stacked display
-        studySet
+        operation: problemSet.operation, // Store operation for stacked display
+        problemSet: problemSet,
+        problemSet: problemSet // Keep for backward compatibility
       };
       
       return problem;
@@ -789,23 +793,23 @@ const Study = {
     const problemCount = urlParams.get('problemCount');
     const format = urlParams.get('format');
     const displayFormat = urlParams.get('displayFormat') || 'side-by-side';
-    const studySetsJson = urlParams.get('studySets');
+    const problemSetsJson = urlParams.get('problemSets') || urlParams.get('problemSets');
     
-    if (!studySetsJson) {
+    if (!problemSetsJson) {
       this.loading = false;
       return;
     }
     
     try {
-      const studySets = JSON.parse(studySetsJson);
+      const problemSets = JSON.parse(problemSetsJson);
       
-      if (!Array.isArray(studySets) || studySets.length === 0) {
+      if (!Array.isArray(problemSets) || problemSets.length === 0) {
         this.loading = false;
         return;
       }
       
-      // Ensure study sets have their operation-specific options initialized
-      studySets.forEach(set => {
+      // Ensure problem sets have their operation-specific options initialized
+      problemSets.forEach(set => {
         if (set.operation === '-') {
           if (set.allowNegative === undefined) {
             set.allowNegative = false;
@@ -825,7 +829,8 @@ const Study = {
         problemCount: problemCount || 'all',
         format: format || 'fill-in-blank',
         displayFormat: displayFormat,
-        studySets: studySets
+        problemSets: problemSets,
+        problemSets: problemSets // Keep for backward compatibility
       };
       
       // Generate problems immediately

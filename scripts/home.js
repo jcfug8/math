@@ -22,7 +22,7 @@ createApp({
         problemCount: 'all',
         format: 'fill-in-blank',
         displayFormat: 'side-by-side',
-        studySets: []
+        problemSets: []
       }
     };
   },
@@ -33,7 +33,7 @@ createApp({
       params.set('problemCount', sessionConfig.problemCount || 'all');
       params.set('format', sessionConfig.format || 'fill-in-blank');
       params.set('displayFormat', sessionConfig.displayFormat || 'side-by-side');
-      params.set('studySets', JSON.stringify(sessionConfig.studySets || []));
+      params.set('problemSets', JSON.stringify(sessionConfig.problemSets || sessionConfig.problemSets || []));
       
       // Navigate to study page with encoded config
       window.location.href = `study.html?${params.toString()}`;

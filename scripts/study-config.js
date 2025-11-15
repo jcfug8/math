@@ -45,16 +45,16 @@ export const StudyConfig = {
           <button 
             v-for="op in operations" 
             :key="op.symbol"
-            @click="addStudySet(op.value)"
+            @click="addProblemSet(op.value)"
             class="operation-button"
           >
             {{ op.symbol }}
           </button>
         </div>
-        <div v-for="(set, index) in localSession.studySets" :key="index" class="study-set">
+        <div v-for="(set, index) in localSession.problemSets" :key="index" class="study-set">
           <div class="study-set-header">
             <h4>Problem Set {{ index + 1 }}</h4>
-            <button @click="removeStudySet(index)" class="remove-set-button">Remove</button>
+            <button @click="removeProblemSet(index)" class="remove-set-button">Remove</button>
           </div>
           <div class="config-option-inline">
             <div class="config-option">
@@ -139,9 +139,9 @@ export const StudyConfig = {
     </div>
   `,
   data() {
-    // Initialize study sets with numberRanges if they don't have them
-    const studySets = this.session.studySets ? [...this.session.studySets] : [];
-    studySets.forEach(set => {
+    // Initialize problem sets with numberRanges if they don't have them
+    const problemSets = this.session.problemSets || this.session.problemSets ? [...(this.session.problemSets || this.session.problemSets)] : [];
+    problemSets.forEach(set => {
       if (!set.numberRanges) {
         // Convert old format (minValue/maxValue) to new format (numberRanges)
         const min = set.minValue !== undefined ? set.minValue : 0;
@@ -166,8 +166,8 @@ export const StudyConfig = {
       }
     });
     
-    // Initialize study set specific options
-    studySets.forEach(set => {
+    // Initialize problem set specific options
+    problemSets.forEach(set => {
       if (set.operation === '-') {
         // For subtraction, initialize allowNegative if not set
         if (set.allowNegative === undefined) {
@@ -196,7 +196,7 @@ export const StudyConfig = {
         problemCount: this.session.problemCount || 'all',
         format: this.session.format || 'fill-in-blank',
         displayFormat: this.session.displayFormat || 'side-by-side',
-        studySets: studySets
+        problemSets: problemSets
       },
       operations: [
         { symbol: '+', value: '+' },
@@ -213,7 +213,7 @@ export const StudyConfig = {
       // Check if any min value is negative
       return set.numberRanges.some(range => range.min < 0);
     },
-    addStudySet(operation) {
+    addProblemSet(operation) {
       const newSet = {
         operation: operation,
         numberCount: 2,
@@ -232,7 +232,7 @@ export const StudyConfig = {
         newSet.decimalPrecision = 2;
       }
       
-      this.localSession.studySets.push(newSet);
+      this.localSession.problemSets.push(newSet);
     },
     updateNumberRanges(set) {
       // Ensure numberRanges array matches numberCount
@@ -267,11 +267,11 @@ export const StudyConfig = {
         }
       }
     },
-    removeStudySet(index) {
-      this.localSession.studySets.splice(index, 1);
+    removeProblemSet(index) {
+      this.localSession.problemSets.splice(index, 1);
     },
     saveAndStart() {
-      if (this.localSession.studySets.length === 0) {
+      if (this.localSession.problemSets.length === 0) {
         alert('Please add at least one problem set!');
         return;
       }
