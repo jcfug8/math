@@ -300,7 +300,11 @@ const Study = {
       if (problemSet.operation === '/') {
         // For division, we need to handle it differently
         // Generate divisors first (avoiding zero), then generate dividends
-        const divisorRanges = problemSet.numberRanges.slice(1);
+        // Filter out zero from divisor ranges to prevent division by zero
+        const divisorRanges = problemSet.numberRanges.slice(1).map(range => ({
+          min: Math.max(1, range.min), // Ensure min is at least 1
+          max: range.max
+        }));
         const divisorCombinations = generateCombinations(divisorRanges, 0, []);
         
         numberCombinations = [];
@@ -308,11 +312,13 @@ const Study = {
           const divisorProduct = divisors.reduce((a, b) => a * b, 1);
           const firstRange = problemSet.numberRanges[0];
           
+          // Skip if divisor product is zero (division by zero) - shouldn't happen with filtered ranges
+          if (divisorProduct === 0) continue;
+          
           if (problemSet.allowDecimalAnswers) {
             // Allow all combinations, including those that result in decimals
+            // 0/0 is already prevented since divisorProduct !== 0
             for (let dividend = firstRange.min; dividend <= firstRange.max; dividend++) {
-              // Skip division by zero
-              if (divisorProduct === 0) continue;
               numberCombinations.push([dividend, ...divisors]);
             }
           } else {
@@ -320,6 +326,7 @@ const Study = {
             const minDividend = firstRange.min === 0 ? 0 : Math.max(firstRange.min, divisorProduct);
             for (let dividend = minDividend; dividend <= firstRange.max; dividend++) {
               // Only include if dividend is divisible by divisor product (or dividend is 0)
+              // 0/0 is already prevented since divisorProduct !== 0
               if (dividend === 0 || dividend % divisorProduct === 0) {
                 numberCombinations.push([dividend, ...divisors]);
               }
@@ -548,19 +555,29 @@ const Study = {
           numbers.push(num);
         }
         // Calculate divisor product
-        const divisorProduct = numbers.reduce((a, b) => a * b, 1);
+        let divisorProduct = numbers.reduce((a, b) => a * b, 1);
+        
+        // Ensure divisor product is never zero (shouldn't happen since we avoid zero divisors)
+        if (divisorProduct === 0) {
+          // Fallback: set all divisors to 1 if somehow we got zero
+          numbers = Array(problemSet.numberCount - 1).fill(1);
+          divisorProduct = 1;
+        }
         
         if (problemSet.allowDecimalAnswers) {
           // Allow any dividend, which may result in decimal answers
           const firstRange = problemSet.numberRanges[0] || { min: 0, max: 100 };
           const min = firstRange.min;
           const max = firstRange.max;
-          const dividend = Math.floor(Math.random() * (max - min + 1)) + min;
+          let dividend = Math.floor(Math.random() * (max - min + 1)) + min;
+          
+          // Prevent 0/0 case: if dividend is 0, ensure divisor is not 0 (already ensured above)
+          // But we can still allow 0/nonzero which is valid (0)
           numbers.unshift(dividend);
         } else {
           // Generate dividend that's a multiple of divisor product (whole number answers only)
           const dividendMultiplier = Math.max(1, Math.floor(Math.random() * 10) + 1);
-          const dividend = divisorProduct * dividendMultiplier;
+          let dividend = divisorProduct * dividendMultiplier;
           // Ensure dividend is within range for first number
           const firstRange = problemSet.numberRanges[0] || { min: 0, max: 100 };
           const minDividend = Math.max(firstRange.min, divisorProduct);
@@ -568,10 +585,13 @@ const Study = {
           if (dividend > maxDividend) {
             // Adjust multiplier to fit range
             const adjustedMultiplier = Math.max(1, Math.floor(maxDividend / divisorProduct));
-            numbers.unshift(divisorProduct * adjustedMultiplier);
-          } else {
-            numbers.unshift(dividend);
+            dividend = divisorProduct * adjustedMultiplier;
           }
+          // Prevent 0/0: if dividend would be 0, use divisorProduct instead
+          if (dividend === 0 && divisorProduct === 0) {
+            dividend = divisorProduct; // This would still be 0, so use a non-zero value
+          }
+          numbers.unshift(dividend);
         }
       } else if (problemSet.operation === '-') {
         // For subtraction, if negative answers are not allowed, ensure first number is large enough
