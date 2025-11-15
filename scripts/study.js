@@ -9,7 +9,7 @@ const Study = {
     <div class="study-page">
       <a :href="backToConfigUrl" class="back-link">← Back to Study Configuration</a>
       <div v-if="loading" class="loading">Loading study session...</div>
-      <div v-else-if="session && (session.problemSets || session.problemSets).length > 0" class="study-container">
+      <div v-else-if="session && session.problemSets && session.problemSets.length > 0" class="study-container">
         <div class="problem-container">
           <div class="progress-indicator">
             <span v-if="streak > 0" class="streak-counter">
@@ -85,7 +85,7 @@ const Study = {
           
         </div>
       </div>
-      <div v-else-if="session && (session.problemSets || session.problemSets).length === 0" class="error">
+      <div v-else-if="session && (!session.problemSets || session.problemSets.length === 0)" class="error">
         No problem sets configured. Please go back and add at least one problem set.
       </div>
       <div v-else class="error">Study session not found</div>
@@ -268,7 +268,7 @@ const Study = {
       }
       return true;
     },
-    generateAllPossibleProblems(problemSet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup) {
+    generateAllPossibleProblems(problemSet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup, limit = null) {
       const problems = [];
       const seenProblems = new Set();
       
@@ -343,9 +343,25 @@ const Study = {
         numberCombinations = generateCombinations(problemSet.numberRanges, 0, []);
       }
       
+      // Shuffle number combinations if we have a limit (to get random selection)
+      let combinationsToUse = numberCombinations;
+      if (limit !== null && limit !== undefined) {
+        // Shuffle array to randomize selection when limiting
+        combinationsToUse = [...numberCombinations];
+        for (let i = combinationsToUse.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [combinationsToUse[i], combinationsToUse[j]] = [combinationsToUse[j], combinationsToUse[i]];
+        }
+      }
+      
       // Convert each combination to a problem
-      for (let i = 0; i < numberCombinations.length; i++) {
-        const numbers = numberCombinations[i];
+      for (let i = 0; i < combinationsToUse.length; i++) {
+        // Stop if we've reached the limit
+        if (limit !== null && limit !== undefined && problems.length >= limit) {
+          break;
+        }
+        
+        const numbers = combinationsToUse[i];
         
         // Calculate answer based on operation
         let answer;
@@ -376,62 +392,61 @@ const Study = {
         if (!seenProblems.has(problemKey)) {
           seenProblems.add(problemKey);
           
-              // Determine format for this problem if "both" mode
-              let problemFormat = this.session.format;
-              if (this.session.format === 'both') {
-                // Alternate in groups of 2
-                if (formatCounter % 4 < 2) {
-                  problemFormat = currentFormatGroup;
-                } else {
-                  problemFormat = currentFormatGroup === 'fill-in-blank' ? 'multiple-choice' : 'fill-in-blank';
-                }
-                formatCounter++;
-              }
-              
-              // Determine display format for this problem if "both" mode
-              let problemDisplayFormat = this.session.displayFormat;
-              if (this.session.displayFormat === 'both') {
-                // Alternate in groups of 2
-                if (displayFormatCounter % 4 < 2) {
-                  problemDisplayFormat = currentDisplayFormatGroup;
-                } else {
-                  problemDisplayFormat = currentDisplayFormatGroup === 'side-by-side' ? 'stacked' : 'side-by-side';
-                }
-                displayFormatCounter++;
-              }
-              
-              // Generate wrong answers for multiple choice
-              const wrongAnswers = [];
-              if (problemFormat === 'multiple-choice') {
-                for (let j = 0; j < 3; j++) {
-                  let wrong;
-                  do {
-                    wrong = answer + Math.floor(Math.random() * 20) - 10;
-                  } while (wrong === answer || wrongAnswers.includes(wrong));
-                  wrongAnswers.push(wrong);
-                }
-              }
-              
-              // Round answer based on decimal precision setting (for division) or default to 2 decimals
-              let roundedAnswer = answer;
-              if (problemSet.operation === '/' && problemSet.allowDecimalAnswers) {
-                const precision = Math.pow(10, problemSet.decimalPrecision || 2);
-                roundedAnswer = Math.round(answer * precision) / precision;
-              } else {
-                roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
-              }
-              
-              const problem = {
-                expression,
-                answer: roundedAnswer,
-                wrongAnswers,
-                format: problemFormat,
-                displayFormat: problemDisplayFormat,
-                numbers: numbers, // Store numbers for stacked display
-                operation: problemSet.operation, // Store operation for stacked display
-                problemSet: problemSet,
-                problemSet: problemSet // Keep for backward compatibility
-              };
+          // Determine format for this problem if "both" mode
+          let problemFormat = this.session.format;
+          if (this.session.format === 'both') {
+            // Alternate in groups of 2
+            if (formatCounter % 4 < 2) {
+              problemFormat = currentFormatGroup;
+            } else {
+              problemFormat = currentFormatGroup === 'fill-in-blank' ? 'multiple-choice' : 'fill-in-blank';
+            }
+            formatCounter++;
+          }
+          
+          // Determine display format for this problem if "both" mode
+          let problemDisplayFormat = this.session.displayFormat;
+          if (this.session.displayFormat === 'both') {
+            // Alternate in groups of 2
+            if (displayFormatCounter % 4 < 2) {
+              problemDisplayFormat = currentDisplayFormatGroup;
+            } else {
+              problemDisplayFormat = currentDisplayFormatGroup === 'side-by-side' ? 'stacked' : 'side-by-side';
+            }
+            displayFormatCounter++;
+          }
+          
+          // Generate wrong answers for multiple choice
+          const wrongAnswers = [];
+          if (problemFormat === 'multiple-choice') {
+            for (let j = 0; j < 3; j++) {
+              let wrong;
+              do {
+                wrong = answer + Math.floor(Math.random() * 20) - 10;
+              } while (wrong === answer || wrongAnswers.includes(wrong));
+              wrongAnswers.push(wrong);
+            }
+          }
+          
+          // Round answer based on decimal precision setting (for division) or default to 2 decimals
+          let roundedAnswer = answer;
+          if (problemSet.operation === '/' && problemSet.allowDecimalAnswers) {
+            const precision = Math.pow(10, problemSet.decimalPrecision || 2);
+            roundedAnswer = Math.round(answer * precision) / precision;
+          } else {
+            roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
+          }
+          
+          const problem = {
+            expression,
+            answer: roundedAnswer,
+            wrongAnswers,
+            format: problemFormat,
+            displayFormat: problemDisplayFormat,
+            numbers: numbers, // Store numbers for stacked display
+            operation: problemSet.operation, // Store operation for stacked display
+            problemSet: problemSet
+          };
           
           problems.push(problem);
         }
@@ -458,11 +473,12 @@ const Study = {
         currentDisplayFormatGroup = Math.random() < 0.5 ? 'side-by-side' : 'stacked';
       }
       
+      const problemSets = this.session.problemSets || [];
+      
       if (this.session.problemCount === 'all') {
         // Generate all possible unique problems for each problem set
-        const problemSets = this.session.problemSets || this.session.problemSets || [];
         for (const problemSet of problemSets) {
-          const result = this.generateAllPossibleProblems(problemSet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup);
+          const result = this.generateAllPossibleProblems(problemSet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup, null);
           this.problems.push(...result.problems);
           formatCounter = result.formatCounter;
           displayFormatCounter = result.displayFormatCounter;
@@ -478,21 +494,24 @@ const Study = {
       } else {
         // Generate specific number of problems
         const count = parseInt(this.session.problemCount) || 10;
-        for (let i = 0; i < count; i++) {
-          // Determine format for this problem if "both" mode
-          let problemFormat = this.session.format;
-          if (this.session.format === 'both') {
-            // Alternate in groups of 2
-            if (formatCounter % 4 < 2) {
-              problemFormat = currentFormatGroup;
-            } else {
-              problemFormat = currentFormatGroup === 'fill-in-blank' ? 'multiple-choice' : 'fill-in-blank';
-            }
-            formatCounter++;
-          }
-          
-          this.problems.push(this.generateProblemInternal(problemFormat));
+        
+        // First, generate all possible problems from all problem sets
+        const allPossibleProblems = [];
+        for (const problemSet of problemSets) {
+          const result = this.generateAllPossibleProblems(problemSet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup, null);
+          allPossibleProblems.push(...result.problems);
+          formatCounter = result.formatCounter;
+          displayFormatCounter = result.displayFormatCounter;
         }
+        
+        // Shuffle all problems
+        for (let i = allPossibleProblems.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [allPossibleProblems[i], allPossibleProblems[j]] = [allPossibleProblems[j], allPossibleProblems[i]];
+        }
+        
+        // Take the first 'count' problems
+        this.problems = allPossibleProblems.slice(0, count);
         this.totalProblems = this.problems.length;
       }
       
@@ -503,7 +522,7 @@ const Study = {
     },
     generateProblemInternal(problemFormat = null, problemDisplayFormat = null) {
       // Select a random problem set
-      const problemSets = this.session.problemSets || this.session.problemSets || [];
+      const problemSets = this.session.problemSets || [];
       const problemSet = problemSets[
         Math.floor(Math.random() * problemSets.length)
       ];
@@ -798,7 +817,7 @@ const Study = {
     const problemCount = urlParams.get('problemCount');
     const format = urlParams.get('format');
     const displayFormat = urlParams.get('displayFormat') || 'side-by-side';
-    const problemSetsJson = urlParams.get('problemSets') || urlParams.get('problemSets');
+    const problemSetsJson = urlParams.get('problemSets');
     
     if (!problemSetsJson) {
       this.loading = false;
@@ -834,8 +853,7 @@ const Study = {
         problemCount: problemCount || 'all',
         format: format || 'fill-in-blank',
         displayFormat: displayFormat,
-        problemSets: problemSets,
-        problemSets: problemSets // Keep for backward compatibility
+        problemSets: problemSets
       };
       
       // Generate problems immediately
