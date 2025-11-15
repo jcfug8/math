@@ -3,7 +3,7 @@ import { createApp } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
 createApp({
   template: `
     <div class="home">
-      <h1>Math Study Sessions</h1>
+      <h1>Math</h1>
       <div class="stories-grid">
         <a 
           v-for="session in studySessions" 
