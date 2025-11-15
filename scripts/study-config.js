@@ -38,9 +38,16 @@ export const StudyConfig = {
           </div>
         </div>
       </div>
+
+      <div class="button-group" style="margin: 20px 0;">
+        <button @click="saveAndStart" class="nav-button" style="background: #42b983;">
+          Start Study
+        </button>
+      </div>
       
       <div class="config-section">
-        <h3>Problem Sets</h3>
+        <h3 style="margin-bottom: 5px; color: #333;">Problem Sets</h3>
+        <div style="margin-bottom: 20px; color: #666; font-size: 0.95rem;">Click an operation to add a new problem set.</div>
         <div class="operation-grid">
           <button 
             v-for="op in operations" 
@@ -129,12 +136,6 @@ export const StudyConfig = {
             </div>
           </div>
         </div>
-      </div>
-      
-      <div class="button-group" style="margin-top: 20px;">
-        <button @click="saveAndStart" class="nav-button" style="background: #42b983;">
-          Start Study
-        </button>
       </div>
     </div>
   `,

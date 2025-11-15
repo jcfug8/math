@@ -7,7 +7,7 @@ const Study = {
   },
   template: `
     <div class="study-page">
-      <a href="index.html" class="back-link">← Back to Study Sessions</a>
+      <a :href="backToConfigUrl" class="back-link">← Back to Study Configuration</a>
       <div v-if="loading" class="loading">Loading study session...</div>
       <div v-else-if="session && (session.problemSets || session.problemSets).length > 0" class="study-container">
         <div class="problem-container">
@@ -129,6 +129,11 @@ const Study = {
         return this.streakEmojis[this.streakEmojis.length - 1]; // Use last emoji if beyond array
       }
       return this.streakEmojis[this.currentEmojiIndex];
+    },
+    backToConfigUrl() {
+      // Preserve current query parameters for the back button
+      const params = new URLSearchParams(window.location.search);
+      return `study-config.html?${params.toString()}`;
     }
   },
   methods: {
