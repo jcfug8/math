@@ -75,6 +75,7 @@ const Study = {
             :problem="currentProblem"
             :format="currentProblem ? currentProblem.format : session.format"
             :displayFormat="currentProblem ? currentProblem.displayFormat : session.displayFormat"
+            :decimalPrecision="session.decimalPrecision"
             @answer-submitted="handleAnswer"
           />
           
@@ -301,12 +302,22 @@ const Study = {
         for (const divisors of divisorCombinations) {
           const divisorProduct = divisors.reduce((a, b) => a * b, 1);
           const firstRange = studySet.numberRanges[0];
-          const minDividend = Math.max(firstRange.min, divisorProduct);
           
-          for (let dividend = minDividend; dividend <= firstRange.max; dividend++) {
-            // Only include if dividend is divisible by divisor product
-            if (dividend % divisorProduct === 0) {
+          if (this.session.allowDecimalAnswers) {
+            // Allow all combinations, including those that result in decimals
+            for (let dividend = firstRange.min; dividend <= firstRange.max; dividend++) {
+              // Skip division by zero
+              if (divisorProduct === 0) continue;
               numberCombinations.push([dividend, ...divisors]);
+            }
+          } else {
+            // Only include whole number answers
+            const minDividend = firstRange.min === 0 ? 0 : Math.max(firstRange.min, divisorProduct);
+            for (let dividend = minDividend; dividend <= firstRange.max; dividend++) {
+              // Only include if dividend is divisible by divisor product (or dividend is 0)
+              if (dividend === 0 || dividend % divisorProduct === 0) {
+                numberCombinations.push([dividend, ...divisors]);
+              }
             }
           }
         }
@@ -396,9 +407,18 @@ const Study = {
             }
           }
           
+          // Round answer based on decimal precision setting (for division) or default to 2 decimals
+          let roundedAnswer = answer;
+          if (studySet.operation === '/' && this.session.allowDecimalAnswers) {
+            const precision = Math.pow(10, this.session.decimalPrecision);
+            roundedAnswer = Math.round(answer * precision) / precision;
+          } else {
+            roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
+          }
+          
           const problem = {
             expression,
-            answer: Math.round(answer * 100) / 100,
+            answer: roundedAnswer,
             wrongAnswers,
             format: problemFormat,
             displayFormat: problemDisplayFormat,
@@ -502,19 +522,29 @@ const Study = {
         }
         // Calculate divisor product
         const divisorProduct = numbers.reduce((a, b) => a * b, 1);
-        // Generate dividend that's a multiple of divisor product
-        const dividendMultiplier = Math.max(1, Math.floor(Math.random() * 10) + 1);
-        const dividend = divisorProduct * dividendMultiplier;
-        // Ensure dividend is within range for first number
-        const firstRange = studySet.numberRanges[0] || { min: 0, max: 100 };
-        const minDividend = Math.max(firstRange.min, divisorProduct);
-        const maxDividend = firstRange.max;
-        if (dividend > maxDividend) {
-          // Adjust multiplier to fit range
-          const adjustedMultiplier = Math.max(1, Math.floor(maxDividend / divisorProduct));
-          numbers.unshift(divisorProduct * adjustedMultiplier);
-        } else {
+        
+        if (this.session.allowDecimalAnswers) {
+          // Allow any dividend, which may result in decimal answers
+          const firstRange = studySet.numberRanges[0] || { min: 0, max: 100 };
+          const min = firstRange.min;
+          const max = firstRange.max;
+          const dividend = Math.floor(Math.random() * (max - min + 1)) + min;
           numbers.unshift(dividend);
+        } else {
+          // Generate dividend that's a multiple of divisor product (whole number answers only)
+          const dividendMultiplier = Math.max(1, Math.floor(Math.random() * 10) + 1);
+          const dividend = divisorProduct * dividendMultiplier;
+          // Ensure dividend is within range for first number
+          const firstRange = studySet.numberRanges[0] || { min: 0, max: 100 };
+          const minDividend = Math.max(firstRange.min, divisorProduct);
+          const maxDividend = firstRange.max;
+          if (dividend > maxDividend) {
+            // Adjust multiplier to fit range
+            const adjustedMultiplier = Math.max(1, Math.floor(maxDividend / divisorProduct));
+            numbers.unshift(divisorProduct * adjustedMultiplier);
+          } else {
+            numbers.unshift(dividend);
+          }
         }
       } else if (studySet.operation === '-') {
         // For subtraction, if negative answers are not allowed, ensure first number is large enough
@@ -625,9 +655,18 @@ const Study = {
         }
       }
       
+      // Round answer based on decimal precision setting (for division) or default to 2 decimals
+      let roundedAnswer = answer;
+      if (studySet.operation === '/' && this.session.allowDecimalAnswers) {
+        const precision = Math.pow(10, this.session.decimalPrecision);
+        roundedAnswer = Math.round(answer * precision) / precision;
+      } else {
+        roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
+      }
+      
       const problem = {
         expression,
-        answer: Math.round(answer * 100) / 100, // Round to 2 decimal places
+        answer: roundedAnswer,
         wrongAnswers,
         format: problemFormat, // Store the format assigned to this problem
         displayFormat: problemDisplayFormat, // Store the display format assigned to this problem
@@ -751,6 +790,8 @@ const Study = {
     const format = urlParams.get('format');
     const displayFormat = urlParams.get('displayFormat') || 'side-by-side';
     const allowNegative = urlParams.get('allowNegative') === 'true';
+    const allowDecimalAnswers = urlParams.get('allowDecimalAnswers') === 'true';
+    const decimalPrecision = parseInt(urlParams.get('decimalPrecision')) || 2;
     const studySetsJson = urlParams.get('studySets');
     
     if (!studySetsJson) {
@@ -771,6 +812,8 @@ const Study = {
         format: format || 'fill-in-blank',
         displayFormat: displayFormat,
         allowNegative: allowNegative,
+        allowDecimalAnswers: allowDecimalAnswers,
+        decimalPrecision: decimalPrecision,
         studySets: studySets
       };
       

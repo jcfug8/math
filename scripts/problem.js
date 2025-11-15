@@ -1,6 +1,6 @@
 // ProblemDisplay component
 export const ProblemDisplay = {
-  props: ['problem', 'format', 'displayFormat'],
+  props: ['problem', 'format', 'displayFormat', 'decimalPrecision'],
   template: `
     <div v-if="problem">
       <!-- Side by side display (default) -->
@@ -47,8 +47,26 @@ export const ProblemDisplay = {
         <div class="stacked-answer">?</div>
       </div>
       
+      <!-- Stacked display for division (only for 2 numbers) -->
+      <div v-if="displayFormat === 'stacked' && problem.operation === '/' && problem.numbers && problem.numbers.length === 2" class="stacked-problem stacked-division">
+        <div class="division-container">
+          <div class="division-divisor">{{ problem.numbers[0] }}</div>
+          <div class="division-bracket-wrapper">
+            <div class="division-bracket-horizontal"></div>
+            <div class="division-bracket-vertical"></div>
+            <div class="division-dividend">{{ problem.numbers[1] }}</div>
+          </div>
+          <div class="division-equals">= ?</div>
+        </div>
+      </div>
+      
+      <!-- Stacked display for division with more than 2 numbers (fallback to side-by-side) -->
+      <div v-if="displayFormat === 'stacked' && problem.operation === '/' && problem.numbers && problem.numbers.length > 2" class="problem-display">
+        {{ problem.expression }} = ?
+      </div>
+      
       <!-- Stacked display for other operations (placeholder for now) -->
-      <div v-if="displayFormat === 'stacked' && problem.operation !== '+' && problem.operation !== '-' && problem.operation !== '*'" class="problem-display">
+      <div v-if="displayFormat === 'stacked' && problem.operation !== '+' && problem.operation !== '-' && problem.operation !== '*' && problem.operation !== '/'" class="problem-display">
         {{ problem.expression }} = ?
       </div>
       
@@ -147,7 +165,10 @@ export const ProblemDisplay = {
         if (isNaN(answer)) {
           return;
         }
-        const isCorrect = Math.abs(answer - this.problem.answer) < 0.01;
+        // Use precision-based tolerance: half of the smallest unit
+        const precision = this.decimalPrecision !== undefined ? this.decimalPrecision : 2;
+        const tolerance = Math.pow(10, -(precision + 1)) / 2;
+        const isCorrect = Math.abs(answer - this.problem.answer) < tolerance;
         this.$emit('answer-submitted', isCorrect);
       }
     },
@@ -155,7 +176,10 @@ export const ProblemDisplay = {
       if (this.selectedAnswer !== null) return;
       
       this.selectedAnswer = option;
-      const isCorrect = Math.abs(option - this.problem.answer) < 0.01;
+      // Use precision-based tolerance: half of the smallest unit
+      const precision = this.decimalPrecision !== undefined ? this.decimalPrecision : 2;
+      const tolerance = Math.pow(10, -(precision + 1)) / 2;
+      const isCorrect = Math.abs(option - this.problem.answer) < tolerance;
       
       setTimeout(() => {
         this.$emit('answer-submitted', isCorrect);

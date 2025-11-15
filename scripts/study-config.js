@@ -42,6 +42,23 @@ export const StudyConfig = {
             </label>
           </div>
         </div>
+        <div class="config-option-inline">
+          <div class="config-option" style="margin-top: 15px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <input type="checkbox" v-model="localSession.allowDecimalAnswers" style="width: auto; margin: 0;" />
+              <span>Allow decimal answers (division)</span>
+            </label>
+          </div>
+          <div v-if="localSession.allowDecimalAnswers" class="config-option" style="margin-top: 15px;">
+            <label>Decimal Precision</label>
+            <select v-model.number="localSession.decimalPrecision">
+              <option :value="0">0 decimal places</option>
+              <option :value="1">1 decimal place</option>
+              <option :value="2">2 decimal places</option>
+              <option :value="3">3 decimal places</option>
+            </select>
+          </div>
+        </div>
       </div>
       
       <div class="config-section">
@@ -140,6 +157,8 @@ export const StudyConfig = {
         format: this.session.format || 'fill-in-blank',
         displayFormat: this.session.displayFormat || 'side-by-side',
         allowNegative: this.session.allowNegative || false,
+        allowDecimalAnswers: this.session.allowDecimalAnswers || false,
+        decimalPrecision: this.session.decimalPrecision !== undefined ? this.session.decimalPrecision : 2,
         studySets: studySets
       },
       operations: [
