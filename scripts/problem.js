@@ -1,72 +1,49 @@
 // ProblemDisplay component
+import { AdditionProblem } from './addition-problem.js';
+import { SubtractionProblem } from './subtraction-problem.js';
+import { MultiplicationProblem } from './multiplication-problem.js';
+import { DivisionProblem } from './division-problem.js';
+
 export const ProblemDisplay = {
+  components: {
+    AdditionProblem,
+    SubtractionProblem,
+    MultiplicationProblem,
+    DivisionProblem
+  },
   props: ['problem', 'format', 'displayFormat', 'decimalPrecision'],
   template: `
     <div v-if="problem">
-      <!-- Side by side display (default) -->
-      <div v-if="displayFormat === 'side-by-side'" class="problem-display">
-        {{ problem.expression }} = ?
-      </div>
+      <!-- Addition -->
+      <AdditionProblem 
+        v-if="problem.operation === '+'"
+        :numbers="problem.numbers"
+        :displayFormat="displayFormat"
+      />
       
-      <!-- Stacked display for addition -->
-      <div v-if="displayFormat === 'stacked' && problem.operation === '+'" class="stacked-problem">
-        <div class="stacked-numbers">
-          <div v-for="(num, index) in sortedNumbers" :key="index" class="stacked-number">
-            <span v-if="index === sortedNumbers.length - 1" class="stacked-operator">+</span>
-            <span v-else class="stacked-operator-spacer"></span>
-            <span class="stacked-value">{{ num }}</span>
-          </div>
-        </div>
-        <div class="stacked-line"></div>
-        <div class="stacked-answer">?</div>
-      </div>
+      <!-- Subtraction -->
+      <SubtractionProblem 
+        v-if="problem.operation === '-'"
+        :numbers="problem.numbers"
+        :displayFormat="displayFormat"
+      />
       
-      <!-- Stacked display for subtraction -->
-      <div v-if="displayFormat === 'stacked' && problem.operation === '-'" class="stacked-problem">
-        <div class="stacked-numbers">
-          <div v-for="(num, index) in sortedNumbers" :key="index" class="stacked-number">
-            <span v-if="index === sortedNumbers.length - 1" class="stacked-operator">−</span>
-            <span v-else class="stacked-operator-spacer"></span>
-            <span class="stacked-value">{{ num }}</span>
-          </div>
-        </div>
-        <div class="stacked-line"></div>
-        <div class="stacked-answer">?</div>
-      </div>
+      <!-- Multiplication -->
+      <MultiplicationProblem 
+        v-if="problem.operation === '*'"
+        :numbers="problem.numbers"
+        :displayFormat="displayFormat"
+      />
       
-      <!-- Stacked display for multiplication -->
-      <div v-if="displayFormat === 'stacked' && problem.operation === '*'" class="stacked-problem">
-        <div class="stacked-numbers">
-          <div v-for="(num, index) in sortedNumbers" :key="index" class="stacked-number">
-            <span v-if="index === sortedNumbers.length - 1" class="stacked-operator">×</span>
-            <span v-else class="stacked-operator-spacer"></span>
-            <span class="stacked-value">{{ num }}</span>
-          </div>
-        </div>
-        <div class="stacked-line"></div>
-        <div class="stacked-answer">?</div>
-      </div>
+      <!-- Division -->
+      <DivisionProblem 
+        v-if="problem.operation === '/'"
+        :numbers="problem.numbers"
+        :displayFormat="displayFormat"
+      />
       
-      <!-- Stacked display for division (only for 2 numbers) -->
-      <div v-if="displayFormat === 'stacked' && problem.operation === '/' && problem.numbers && problem.numbers.length === 2" class="stacked-problem stacked-division">
-        <div class="division-container">
-          <div class="division-divisor">{{ problem.numbers[0] }}</div>
-          <div class="division-bracket-wrapper">
-            <div class="division-bracket-horizontal"></div>
-            <div class="division-bracket-vertical"></div>
-            <div class="division-dividend">{{ problem.numbers[1] }}</div>
-          </div>
-          <div class="division-equals">= ?</div>
-        </div>
-      </div>
-      
-      <!-- Stacked display for division with more than 2 numbers (fallback to side-by-side) -->
-      <div v-if="displayFormat === 'stacked' && problem.operation === '/' && problem.numbers && problem.numbers.length > 2" class="problem-display">
-        {{ problem.expression }} = ?
-      </div>
-      
-      <!-- Stacked display for other operations (placeholder for now) -->
-      <div v-if="displayFormat === 'stacked' && problem.operation !== '+' && problem.operation !== '-' && problem.operation !== '*' && problem.operation !== '/'" class="problem-display">
+      <!-- Fallback for unknown operations -->
+      <div v-if="problem.operation !== '+' && problem.operation !== '-' && problem.operation !== '*' && problem.operation !== '/'" class="problem-display">
         {{ problem.expression }} = ?
       </div>
       
@@ -109,21 +86,6 @@ export const ProblemDisplay = {
       selectedAnswer: null,
       shuffledOptions: []
     };
-  },
-  computed: {
-    sortedNumbers() {
-      if (!this.problem || !this.problem.numbers) return [];
-      
-      // Sort numbers by digit count (descending), then by value if same digit count
-      return [...this.problem.numbers].sort((a, b) => {
-        const aDigits = Math.abs(a).toString().length;
-        const bDigits = Math.abs(b).toString().length;
-        if (aDigits !== bDigits) {
-          return bDigits - aDigits; // More digits first
-        }
-        return b - a; // Larger value first if same digits
-      });
-    }
   },
   watch: {
     problem() {

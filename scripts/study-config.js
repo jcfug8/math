@@ -39,7 +39,7 @@ export const StudyConfig = {
         </div>
       </div>
 
-      <div class="button-group" style="margin: 20px 0;">
+      <div class="button-group" style="margin: 50px 0;">
         <button @click="saveAndStart" class="nav-button" style="background: #42b983;">
           Start Study
         </button>

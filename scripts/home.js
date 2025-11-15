@@ -47,6 +47,22 @@ createApp({
           }]
         },
         {
+          title: 'Addition 0-5',
+          description: 'Practice addition with numbers 0-5',
+          icon: '+',
+          problemCount: 'all',
+          format: 'fill-in-blank',
+          displayFormat: 'side-by-side',
+          problemSets: [{
+            operation: '+',
+            numberCount: 2,
+            numberRanges: [
+              { min: 0, max: 5 },
+              { min: 0, max: 5 }
+            ]
+          }]
+        },
+        {
           title: 'Addition 0-10',
           description: 'Practice addition with numbers 0-10',
           icon: '+',
