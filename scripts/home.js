@@ -22,9 +22,6 @@ createApp({
         problemCount: 'all',
         format: 'fill-in-blank',
         displayFormat: 'side-by-side',
-        allowNegative: false,
-        allowDecimalAnswers: false,
-        decimalPrecision: 2,
         studySets: []
       }
     };
@@ -36,9 +33,6 @@ createApp({
       params.set('problemCount', sessionConfig.problemCount || 'all');
       params.set('format', sessionConfig.format || 'fill-in-blank');
       params.set('displayFormat', sessionConfig.displayFormat || 'side-by-side');
-      params.set('allowNegative', sessionConfig.allowNegative ? 'true' : 'false');
-      params.set('allowDecimalAnswers', sessionConfig.allowDecimalAnswers ? 'true' : 'false');
-      params.set('decimalPrecision', (sessionConfig.decimalPrecision !== undefined ? sessionConfig.decimalPrecision : 2).toString());
       params.set('studySets', JSON.stringify(sessionConfig.studySets || []));
       
       // Navigate to study page with encoded config

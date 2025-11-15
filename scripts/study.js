@@ -75,7 +75,7 @@ const Study = {
             :problem="currentProblem"
             :format="currentProblem ? currentProblem.format : session.format"
             :displayFormat="currentProblem ? currentProblem.displayFormat : session.displayFormat"
-            :decimalPrecision="session.decimalPrecision"
+            :decimalPrecision="currentProblem && currentProblem.studySet && currentProblem.studySet.operation === '/' ? (currentProblem.studySet.decimalPrecision || 2) : 2"
             @answer-submitted="handleAnswer"
           />
           
@@ -86,7 +86,7 @@ const Study = {
         </div>
       </div>
       <div v-else-if="session && session.studySets.length === 0" class="error">
-        No study sets configured. Please go back and add at least one study set.
+        No problem sets configured. Please go back and add at least one problem set.
       </div>
       <div v-else class="error">Study session not found</div>
     </div>
@@ -303,7 +303,7 @@ const Study = {
           const divisorProduct = divisors.reduce((a, b) => a * b, 1);
           const firstRange = studySet.numberRanges[0];
           
-          if (this.session.allowDecimalAnswers) {
+          if (studySet.allowDecimalAnswers) {
             // Allow all combinations, including those that result in decimals
             for (let dividend = firstRange.min; dividend <= firstRange.max; dividend++) {
               // Skip division by zero
@@ -324,7 +324,7 @@ const Study = {
       } else if (studySet.operation === '-') {
         // For subtraction, filter out negative results if not allowed
         const allCombinations = generateCombinations(studySet.numberRanges, 0, []);
-        if (this.session.allowNegative) {
+        if (studySet.allowNegative) {
           numberCombinations = allCombinations;
         } else {
           // Filter to only include combinations where result is non-negative
@@ -409,8 +409,8 @@ const Study = {
           
           // Round answer based on decimal precision setting (for division) or default to 2 decimals
           let roundedAnswer = answer;
-          if (studySet.operation === '/' && this.session.allowDecimalAnswers) {
-            const precision = Math.pow(10, this.session.decimalPrecision);
+          if (studySet.operation === '/' && studySet.allowDecimalAnswers) {
+            const precision = Math.pow(10, studySet.decimalPrecision || 2);
             roundedAnswer = Math.round(answer * precision) / precision;
           } else {
             roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
@@ -523,7 +523,7 @@ const Study = {
         // Calculate divisor product
         const divisorProduct = numbers.reduce((a, b) => a * b, 1);
         
-        if (this.session.allowDecimalAnswers) {
+        if (studySet.allowDecimalAnswers) {
           // Allow any dividend, which may result in decimal answers
           const firstRange = studySet.numberRanges[0] || { min: 0, max: 100 };
           const min = firstRange.min;
@@ -548,7 +548,7 @@ const Study = {
         }
       } else if (studySet.operation === '-') {
         // For subtraction, if negative answers are not allowed, ensure first number is large enough
-        if (!this.session.allowNegative) {
+        if (!studySet.allowNegative) {
           // Generate numbers from right to left, ensuring result is non-negative
           // Start with the last number (smallest)
           for (let i = studySet.numberCount - 1; i >= 1; i--) {
@@ -657,8 +657,8 @@ const Study = {
       
       // Round answer based on decimal precision setting (for division) or default to 2 decimals
       let roundedAnswer = answer;
-      if (studySet.operation === '/' && this.session.allowDecimalAnswers) {
-        const precision = Math.pow(10, this.session.decimalPrecision);
+      if (studySet.operation === '/' && studySet.allowDecimalAnswers) {
+        const precision = Math.pow(10, studySet.decimalPrecision || 2);
         roundedAnswer = Math.round(answer * precision) / precision;
       } else {
         roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
@@ -789,9 +789,6 @@ const Study = {
     const problemCount = urlParams.get('problemCount');
     const format = urlParams.get('format');
     const displayFormat = urlParams.get('displayFormat') || 'side-by-side';
-    const allowNegative = urlParams.get('allowNegative') === 'true';
-    const allowDecimalAnswers = urlParams.get('allowDecimalAnswers') === 'true';
-    const decimalPrecision = parseInt(urlParams.get('decimalPrecision')) || 2;
     const studySetsJson = urlParams.get('studySets');
     
     if (!studySetsJson) {
@@ -807,13 +804,27 @@ const Study = {
         return;
       }
       
+      // Ensure study sets have their operation-specific options initialized
+      studySets.forEach(set => {
+        if (set.operation === '-') {
+          if (set.allowNegative === undefined) {
+            set.allowNegative = false;
+          }
+        }
+        if (set.operation === '/') {
+          if (set.allowDecimalAnswers === undefined) {
+            set.allowDecimalAnswers = false;
+          }
+          if (set.decimalPrecision === undefined) {
+            set.decimalPrecision = 2;
+          }
+        }
+      });
+      
       this.session = {
         problemCount: problemCount || 'all',
         format: format || 'fill-in-blank',
         displayFormat: displayFormat,
-        allowNegative: allowNegative,
-        allowDecimalAnswers: allowDecimalAnswers,
-        decimalPrecision: decimalPrecision,
         studySets: studySets
       };
       
