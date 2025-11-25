@@ -21,7 +21,6 @@ createApp({
     // Initialize session from query params if available
     const urlParams = new URLSearchParams(window.location.search);
     const problemSetsJson = urlParams.get('problemSets');
-    const problemCount = urlParams.get('problemCount');
     const format = urlParams.get('format');
     const displayFormat = urlParams.get('displayFormat');
     
@@ -29,6 +28,12 @@ createApp({
     if (problemSetsJson) {
       try {
         problemSets = JSON.parse(problemSetsJson);
+        // Ensure each problem set has problemCount
+        problemSets.forEach(set => {
+          if (set.problemCount === undefined) {
+            set.problemCount = 20;
+          }
+        });
       } catch (error) {
         console.error('Error parsing problem sets from URL:', error);
       }
@@ -36,7 +41,6 @@ createApp({
     
     return {
       session: {
-        problemCount: problemCount || 'all',
         format: format || 'fill-in-blank',
         displayFormat: displayFormat || 'side-by-side',
         problemSets: problemSets
@@ -47,7 +51,6 @@ createApp({
     startStudy(sessionConfig) {
       // Encode session configuration into query params
       const params = new URLSearchParams();
-      params.set('problemCount', sessionConfig.problemCount || 'all');
       params.set('format', sessionConfig.format || 'fill-in-blank');
       params.set('displayFormat', sessionConfig.displayFormat || 'side-by-side');
       params.set('problemSets', JSON.stringify(sessionConfig.problemSets || []));

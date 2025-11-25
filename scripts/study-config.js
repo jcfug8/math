@@ -9,16 +9,6 @@ export const StudyConfig = {
       <div class="config-section">
         <div class="config-option-inline">
           <div class="config-option">
-            <label>Number of Problems</label>
-            <select v-model="localSession.problemCount">
-              <option value="10">10 problems</option>
-              <option value="20">20 problems</option>
-              <option value="50">50 problems</option>
-              <option value="100">100 problems</option>
-              <option value="all">All problems</option>
-            </select>
-          </div>
-          <div class="config-option">
             <label>Question Format</label>
             <select v-model="localSession.format">
               <option value="fill-in-blank">Fill in the Blank</option>
@@ -26,8 +16,6 @@ export const StudyConfig = {
               <option value="both">Both</option>
             </select>
           </div>
-        </div>
-        <div class="config-option-inline">
           <div class="config-option">
             <label>Display Format</label>
             <select v-model="localSession.displayFormat">
@@ -74,18 +62,33 @@ export const StudyConfig = {
               </select>
             </div>
             <div class="config-option">
-              <label>Number of Numbers</label>
-              <select v-model.number="set.numberCount" @change="updateNumberRanges(set)">
-                <option :value="2">2</option>
-                <option :value="3">3</option>
-                <option :value="4">4</option>
-                <option :value="5">5</option>
+              <label>Number of Problems</label>
+              <select v-model.number="set.problemCount">
+                <option :value="10">10 problems</option>
+                <option :value="20">20 problems</option>
+                <option :value="50">50 problems</option>
+                <option :value="100">100 problems</option>
+                <option :value="120">120 problems</option>
+                <option :value="150">150 problems</option>
+                <option :value="180">180 problems</option>
+                <option :value="200">200 problems</option>
               </select>
             </div>
           </div>
           <div class="number-ranges-grid">
             <div v-for="(range, numIndex) in set.numberRanges" :key="numIndex" class="number-range-group">
-              <h5 style="margin: 10px 0 5px; color: #666; font-size: 0.9rem;">Number {{ numIndex + 1 }}</h5>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                <h5 style="margin: 0; color: #666; font-size: 0.9rem;">Number {{ numIndex + 1 }}</h5>
+                <button 
+                  @click="removeNumberRange(set, numIndex)" 
+                  class="remove-range-button"
+                  :disabled="set.numberRanges.length <= 1"
+                  style="background: #ff6b6b; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.8rem;"
+                  :style="{ opacity: set.numberRanges.length <= 1 ? 0.5 : 1, cursor: set.numberRanges.length <= 1 ? 'not-allowed' : 'pointer' }"
+                >
+                  Remove
+                </button>
+              </div>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <div class="config-option" style="margin-bottom: 0;">
                   <label>Min</label>
@@ -101,6 +104,13 @@ export const StudyConfig = {
                 </div>
               </div>
             </div>
+            <button 
+              @click="addNumberRange(set)" 
+              class="add-range-button"
+              style="background: #42b983; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; margin-top: 10px;"
+            >
+              + Add Number
+            </button>
           </div>
           <!-- Allow negative answers for subtraction -->
           <div v-if="set.operation === '-'" class="config-option" style="margin-top: 15px;">
@@ -144,31 +154,28 @@ export const StudyConfig = {
     const problemSets = this.session.problemSets || this.session.problemSets ? [...(this.session.problemSets || this.session.problemSets)] : [];
     problemSets.forEach(set => {
       if (!set.numberRanges) {
-        // Convert old format (minValue/maxValue) to new format (numberRanges)
+        // Convert old format (minValue/maxValue or numberCount) to new format (numberRanges)
         const min = set.minValue !== undefined ? set.minValue : 0;
         const max = set.maxValue !== undefined ? set.maxValue : 10;
-        const count = set.numberCount || 2;
+        const count = set.numberCount || 2; // Support old format temporarily
         set.numberRanges = Array(count).fill(null).map(() => ({ min, max }));
         // Remove old properties
         delete set.minValue;
         delete set.maxValue;
-      } else {
-        // Ensure numberRanges matches numberCount
-        const count = set.numberCount || set.numberRanges.length;
-        while (set.numberRanges.length < count) {
-          const lastRange = set.numberRanges.length > 0 
-            ? set.numberRanges[set.numberRanges.length - 1]
-            : { min: 0, max: 10 };
-          set.numberRanges.push({ min: lastRange.min, max: lastRange.max });
-        }
-        while (set.numberRanges.length > count) {
-          set.numberRanges.pop();
-        }
+        delete set.numberCount;
+      }
+      // Ensure numberRanges has at least one range
+      if (set.numberRanges.length === 0) {
+        set.numberRanges = [{ min: 0, max: 10 }];
       }
     });
     
     // Initialize problem set specific options
     problemSets.forEach(set => {
+      // Set default problemCount if not provided
+      if (set.problemCount === undefined) {
+        set.problemCount = 20;
+      }
       if (set.operation === '-') {
         // For subtraction, initialize allowNegative if not set
         if (set.allowNegative === undefined) {
@@ -194,7 +201,6 @@ export const StudyConfig = {
     
     return {
       localSession: {
-        problemCount: this.session.problemCount || 'all',
         format: this.session.format || 'fill-in-blank',
         displayFormat: this.session.displayFormat || 'side-by-side',
         problemSets: problemSets
@@ -217,7 +223,7 @@ export const StudyConfig = {
     addProblemSet(operation) {
       const newSet = {
         operation: operation,
-        numberCount: 2,
+        problemCount: 20,
         numberRanges: [
           { min: 0, max: 10 },
           { min: 0, max: 10 }
@@ -235,29 +241,15 @@ export const StudyConfig = {
       
       this.localSession.problemSets.push(newSet);
     },
-    updateNumberRanges(set) {
-      // Ensure numberRanges array matches numberCount
-      if (!set.numberRanges) {
-        set.numberRanges = [];
-      }
-      
-      // Add or remove ranges to match numberCount
-      while (set.numberRanges.length < set.numberCount) {
-        const lastRange = set.numberRanges.length > 0 
-          ? set.numberRanges[set.numberRanges.length - 1]
-          : { min: 0, max: 10 };
-        set.numberRanges.push({ min: lastRange.min, max: lastRange.max });
-      }
-      
-      while (set.numberRanges.length > set.numberCount) {
-        set.numberRanges.pop();
-      }
-      
-      // Auto-check allowNegative for subtraction if any min is negative
-      if (set.operation === '-') {
-        if (this.hasNegativeMin(set)) {
-          set.allowNegative = true;
-        }
+    addNumberRange(set) {
+      const lastRange = set.numberRanges.length > 0 
+        ? set.numberRanges[set.numberRanges.length - 1]
+        : { min: 0, max: 10 };
+      set.numberRanges.push({ min: lastRange.min, max: lastRange.max });
+    },
+    removeNumberRange(set, index) {
+      if (set.numberRanges.length > 1) {
+        set.numberRanges.splice(index, 1);
       }
     },
     handleMinChange(set) {

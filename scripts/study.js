@@ -1,5 +1,6 @@
 import { createApp } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
 import { ProblemDisplay } from './problem.js';
+const { generateStudySetProblems } = await import('./utils.js');
 
 const Study = {
   components: {
@@ -33,7 +34,7 @@ const Study = {
               {{ currentEmoji }}
             </span>
             <span>
-              Problem {{ currentProblemIndex + 1 }} / {{ totalProblems }}
+              Problem {{ currentProblemIndex + 1 }} / {{ problems.length }}
               <span v-if="answeredProblems[currentProblemIndex] !== undefined" class="answer-indicator" :class="answeredProblems[currentProblemIndex] ? 'correct' : 'incorrect'">
                 <span v-if="answeredProblems[currentProblemIndex]">✓</span>
                 <span v-else>✗</span>
@@ -73,7 +74,7 @@ const Study = {
           
           <ProblemDisplay
             :problem="currentProblem"
-            :format="currentProblem ? currentProblem.format : session.format"
+            :format="currentProblem ? currentProblem.answerFormat : session.answerFormat"
             :displayFormat="currentProblem ? currentProblem.displayFormat : session.displayFormat"
             :decimalPrecision="currentProblem && currentProblem.problemSet && currentProblem.problemSet.operation === '/' ? (currentProblem.problemSet.decimalPrecision || 2) : 2"
             @answer-submitted="handleAnswer"
@@ -100,7 +101,6 @@ const Study = {
       showResult: false,
       resultMessage: '',
       resultClass: '',
-      totalProblems: 0,
       answeredProblems: {}, // Track which problems have been answered: { index: true/false }
       completionSoundPlayed: false, // Track if completion sound has been played
       streak: 0, // Track consecutive correct answers
@@ -268,478 +268,45 @@ const Study = {
       }
       return true;
     },
-    generateAllPossibleProblems(problemSet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup, limit = null) {
-      const problems = [];
-      const seenProblems = new Set();
-      
-      // Helper function to generate all number combinations
-      const generateCombinations = (ranges, index, currentNumbers) => {
-        if (index === ranges.length) {
-          // We have a complete combination of numbers
-          return [currentNumbers];
-        }
-        
-        const combinations = [];
-        const range = ranges[index];
-        for (let num = range.min; num <= range.max; num++) {
-          const newNumbers = [...currentNumbers, num];
-          combinations.push(...generateCombinations(ranges, index + 1, newNumbers));
-        }
-        return combinations;
-      };
-      
-      // Get all number ranges for this problem set
-      if (!problemSet.numberRanges) {
-        const min = problemSet.minValue !== undefined ? problemSet.minValue : 0;
-        const max = problemSet.maxValue !== undefined ? problemSet.maxValue : 10;
-        problemSet.numberRanges = Array(problemSet.numberCount).fill(null).map(() => ({ min, max }));
-      }
-      
-      // Generate all possible number combinations
-      let numberCombinations;
-      if (problemSet.operation === '/') {
-        // For division, we need to handle it differently
-        // Generate divisors first (avoiding zero), then generate dividends
-        // Filter out zero from divisor ranges to prevent division by zero
-        const divisorRanges = problemSet.numberRanges.slice(1).map(range => ({
-          min: Math.max(1, range.min), // Ensure min is at least 1
-          max: range.max
-        }));
-        const divisorCombinations = generateCombinations(divisorRanges, 0, []);
-        
-        numberCombinations = [];
-        for (const divisors of divisorCombinations) {
-          const divisorProduct = divisors.reduce((a, b) => a * b, 1);
-          const firstRange = problemSet.numberRanges[0];
-          
-          // Skip if divisor product is zero (division by zero) - shouldn't happen with filtered ranges
-          if (divisorProduct === 0) continue;
-          
-          if (problemSet.allowDecimalAnswers) {
-            // Allow all combinations, including those that result in decimals
-            // 0/0 is already prevented since divisorProduct !== 0
-            for (let dividend = firstRange.min; dividend <= firstRange.max; dividend++) {
-              numberCombinations.push([dividend, ...divisors]);
-            }
-          } else {
-            // Only include whole number answers
-            const minDividend = firstRange.min === 0 ? 0 : Math.max(firstRange.min, divisorProduct);
-            for (let dividend = minDividend; dividend <= firstRange.max; dividend++) {
-              // Only include if dividend is divisible by divisor product (or dividend is 0)
-              // 0/0 is already prevented since divisorProduct !== 0
-              if (dividend === 0 || dividend % divisorProduct === 0) {
-                numberCombinations.push([dividend, ...divisors]);
-              }
-            }
-          }
-        }
-      } else if (problemSet.operation === '-') {
-        // For subtraction, filter out negative results if not allowed
-        const allCombinations = generateCombinations(problemSet.numberRanges, 0, []);
-        if (problemSet.allowNegative) {
-          numberCombinations = allCombinations;
-        } else {
-          // Filter to only include combinations where result is non-negative
-          numberCombinations = allCombinations.filter(numbers => {
-            const result = numbers.reduce((a, b) => a - b);
-            return result >= 0;
-          });
-        }
-      } else {
-        // For other operations (addition, multiplication), generate all combinations
-        numberCombinations = generateCombinations(problemSet.numberRanges, 0, []);
-      }
-      
-      // Shuffle number combinations if we have a limit (to get random selection)
-      let combinationsToUse = numberCombinations;
-      if (limit !== null && limit !== undefined) {
-        // Shuffle array to randomize selection when limiting
-        combinationsToUse = [...numberCombinations];
-        for (let i = combinationsToUse.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [combinationsToUse[i], combinationsToUse[j]] = [combinationsToUse[j], combinationsToUse[i]];
-        }
-      }
-      
-      // Convert each combination to a problem
-      for (let i = 0; i < combinationsToUse.length; i++) {
-        // Stop if we've reached the limit
-        if (limit !== null && limit !== undefined && problems.length >= limit) {
-          break;
-        }
-        
-        const numbers = combinationsToUse[i];
-        
-        // Calculate answer based on operation
-        let answer;
-        let expression;
-        
-        switch (problemSet.operation) {
-          case '+':
-            answer = numbers.reduce((a, b) => a + b, 0);
-            expression = numbers.join(' + ');
-            break;
-          case '-':
-            answer = numbers.reduce((a, b) => a - b);
-            expression = numbers.join(' - ');
-            break;
-          case '*':
-            answer = numbers.reduce((a, b) => a * b, 1);
-            expression = numbers.join(' × ');
-            break;
-          case '/':
-            const divisors = numbers.slice(1);
-            const divisorProduct = divisors.reduce((a, b) => a * b, 1);
-            answer = numbers[0] / divisorProduct;
-            expression = `${numbers[0]} ÷ ${divisors.join(' ÷ ')}`;
-            break;
-        }
-        
-        const problemKey = `${expression}|${answer}`;
-        if (!seenProblems.has(problemKey)) {
-          seenProblems.add(problemKey);
-          
-          // Determine format for this problem if "both" mode
-          let problemFormat = this.session.format;
-          if (this.session.format === 'both') {
-            // Alternate in groups of 2
-            if (formatCounter % 4 < 2) {
-              problemFormat = currentFormatGroup;
-            } else {
-              problemFormat = currentFormatGroup === 'fill-in-blank' ? 'multiple-choice' : 'fill-in-blank';
-            }
-            formatCounter++;
-          }
-          
-          // Determine display format for this problem if "both" mode
-          let problemDisplayFormat = this.session.displayFormat;
-          if (this.session.displayFormat === 'both') {
-            // Alternate in groups of 2
-            if (displayFormatCounter % 4 < 2) {
-              problemDisplayFormat = currentDisplayFormatGroup;
-            } else {
-              problemDisplayFormat = currentDisplayFormatGroup === 'side-by-side' ? 'stacked' : 'side-by-side';
-            }
-            displayFormatCounter++;
-          }
-          
-          // Generate wrong answers for multiple choice
-          const wrongAnswers = [];
-          if (problemFormat === 'multiple-choice') {
-            for (let j = 0; j < 3; j++) {
-              let wrong;
-              do {
-                wrong = answer + Math.floor(Math.random() * 20) - 10;
-              } while (wrong === answer || wrongAnswers.includes(wrong));
-              wrongAnswers.push(wrong);
-            }
-          }
-          
-          // Round answer based on decimal precision setting (for division) or default to 2 decimals
-          let roundedAnswer = answer;
-          if (problemSet.operation === '/' && problemSet.allowDecimalAnswers) {
-            const precision = Math.pow(10, problemSet.decimalPrecision || 2);
-            roundedAnswer = Math.round(answer * precision) / precision;
-          } else {
-            roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
-          }
-          
-          const problem = {
-            expression,
-            answer: roundedAnswer,
-            wrongAnswers,
-            format: problemFormat,
-            displayFormat: problemDisplayFormat,
-            numbers: numbers, // Store numbers for stacked display
-            operation: problemSet.operation, // Store operation for stacked display
-            problemSet: problemSet
-          };
-          
-          problems.push(problem);
-        }
-      }
-      
-      return { problems, formatCounter, displayFormatCounter };
-    },
     generateProblems() {
       this.problems = [];
       
-      // Initialize format alternation for "both" mode
-      let formatCounter = 0;
-      let currentFormatGroup = null;
-      if (this.session.format === 'both') {
-        // Randomly choose which format starts first
-        currentFormatGroup = Math.random() < 0.5 ? 'fill-in-blank' : 'multiple-choice';
-      }
+      this.problems = generateStudySetProblems({
+        answerFormat: this.session.answerFormat,
+        displayFormat: this.session.displayFormat,
+        problemSets: this.session.problemSets
+      })
       
-      // Initialize display format alternation for "both" mode
-      let displayFormatCounter = 0;
-      let currentDisplayFormatGroup = null;
-      if (this.session.displayFormat === 'both') {
-        // Randomly choose which display format starts first
-        currentDisplayFormatGroup = Math.random() < 0.5 ? 'side-by-side' : 'stacked';
-      }
+      // Shuffle all problems
+      this.problems.sort(()=>(Math.random() > 0.5 ? -1 : 1))
       
-      const problemSets = this.session.problemSets || [];
-      
-      if (this.session.problemCount === 'all') {
-        // Generate all possible unique problems for each problem set
-        for (const problemSet of problemSets) {
-          const result = this.generateAllPossibleProblems(problemSet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup, null);
-          this.problems.push(...result.problems);
-          formatCounter = result.formatCounter;
-          displayFormatCounter = result.displayFormatCounter;
-        }
-        
-        // Shuffle problems to randomize order
-        for (let i = this.problems.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [this.problems[i], this.problems[j]] = [this.problems[j], this.problems[i]];
-        }
-        
-        this.totalProblems = this.problems.length;
-      } else {
-        // Generate specific number of problems
-        const count = parseInt(this.session.problemCount) || 10;
-        
-        // First, generate all possible problems from all problem sets
-        const allPossibleProblems = [];
-        for (const problemSet of problemSets) {
-          const result = this.generateAllPossibleProblems(problemSet, formatCounter, currentFormatGroup, displayFormatCounter, currentDisplayFormatGroup, null);
-          allPossibleProblems.push(...result.problems);
-          formatCounter = result.formatCounter;
-          displayFormatCounter = result.displayFormatCounter;
-        }
-        
-        // Shuffle all problems
-        for (let i = allPossibleProblems.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [allPossibleProblems[i], allPossibleProblems[j]] = [allPossibleProblems[j], allPossibleProblems[i]];
-        }
-        
-        // Take the first 'count' problems
-        this.problems = allPossibleProblems.slice(0, count);
-        this.totalProblems = this.problems.length;
-      }
-      
+      // reset vars
       this.currentProblemIndex = 0;
       this.completionSoundPlayed = false; // Reset completion sound flag
       this.streak = 0; // Reset streak
       this.emojiJustChanged = false; // Reset emoji animation flag
     },
-    generateProblemInternal(problemFormat = null, problemDisplayFormat = null) {
-      // Select a random problem set
-      const problemSets = this.session.problemSets || [];
-      const problemSet = problemSets[
-        Math.floor(Math.random() * problemSets.length)
-      ];
-      
-      // Generate numbers based on problem set configuration
-      const numbers = [];
-      
-      // Ensure numberRanges exists and matches numberCount
-      if (!problemSet.numberRanges) {
-        // Fallback for old format
-        const min = problemSet.minValue !== undefined ? problemSet.minValue : 0;
-        const max = problemSet.maxValue !== undefined ? problemSet.maxValue : 10;
-        problemSet.numberRanges = Array(problemSet.numberCount).fill(null).map(() => ({ min, max }));
-      }
-      
-      if (problemSet.operation === '/') {
-        // For division, generate divisors first (avoiding zero)
-        for (let i = 1; i < problemSet.numberCount; i++) {
-          const range = problemSet.numberRanges[i] || { min: 1, max: 10 };
-          const min = Math.max(1, range.min); // Avoid zero for divisors
-          const max = range.max;
-          const num = Math.floor(Math.random() * (max - min + 1)) + min;
-          numbers.push(num);
-        }
-        // Calculate divisor product
-        let divisorProduct = numbers.reduce((a, b) => a * b, 1);
-        
-        // Ensure divisor product is never zero (shouldn't happen since we avoid zero divisors)
-        if (divisorProduct === 0) {
-          // Fallback: set all divisors to 1 if somehow we got zero
-          numbers = Array(problemSet.numberCount - 1).fill(1);
-          divisorProduct = 1;
-        }
-        
-        if (problemSet.allowDecimalAnswers) {
-          // Allow any dividend, which may result in decimal answers
-          const firstRange = problemSet.numberRanges[0] || { min: 0, max: 100 };
-          const min = firstRange.min;
-          const max = firstRange.max;
-          let dividend = Math.floor(Math.random() * (max - min + 1)) + min;
-          
-          // Prevent 0/0 case: if dividend is 0, ensure divisor is not 0 (already ensured above)
-          // But we can still allow 0/nonzero which is valid (0)
-          numbers.unshift(dividend);
-        } else {
-          // Generate dividend that's a multiple of divisor product (whole number answers only)
-          const dividendMultiplier = Math.max(1, Math.floor(Math.random() * 10) + 1);
-          let dividend = divisorProduct * dividendMultiplier;
-          // Ensure dividend is within range for first number
-          const firstRange = problemSet.numberRanges[0] || { min: 0, max: 100 };
-          const minDividend = Math.max(firstRange.min, divisorProduct);
-          const maxDividend = firstRange.max;
-          if (dividend > maxDividend) {
-            // Adjust multiplier to fit range
-            const adjustedMultiplier = Math.max(1, Math.floor(maxDividend / divisorProduct));
-            dividend = divisorProduct * adjustedMultiplier;
-          }
-          // Prevent 0/0: if dividend would be 0, use divisorProduct instead
-          if (dividend === 0 && divisorProduct === 0) {
-            dividend = divisorProduct; // This would still be 0, so use a non-zero value
-          }
-          numbers.unshift(dividend);
-        }
-      } else if (problemSet.operation === '-') {
-        // For subtraction, if negative answers are not allowed, ensure first number is large enough
-        if (!problemSet.allowNegative) {
-          // Generate numbers from right to left, ensuring result is non-negative
-          // Start with the last number (smallest)
-          for (let i = problemSet.numberCount - 1; i >= 1; i--) {
-            const range = problemSet.numberRanges[i] || { min: 0, max: 10 };
-            const min = range.min;
-            const max = range.max;
-            const num = Math.floor(Math.random() * (max - min + 1)) + min;
-            numbers.push(num);
-          }
-          // Calculate sum of all numbers after the first
-          const sumOfRest = numbers.reduce((a, b) => a + b, 0);
-          // Generate first number that's at least as large as sum of rest
-          const firstRange = problemSet.numberRanges[0] || { min: 0, max: 10 };
-          const minFirst = Math.max(firstRange.min, sumOfRest);
-          const maxFirst = firstRange.max;
-          if (minFirst > maxFirst) {
-            // If we can't generate a valid first number, adjust the ranges
-            // Generate first number at max, then adjust others
-            numbers = [];
-            const firstNum = maxFirst;
-            const remainingSum = Math.floor(maxFirst * 0.8); // Use 80% of max for remaining numbers
-            for (let i = 1; i < problemSet.numberCount; i++) {
-              const range = problemSet.numberRanges[i] || { min: 0, max: 10 };
-              const max = Math.min(range.max, remainingSum);
-              const min = range.min;
-              if (max >= min) {
-                const num = Math.floor(Math.random() * (max - min + 1)) + min;
-                numbers.push(num);
-              } else {
-                numbers.push(min);
-              }
-            }
-            numbers.unshift(firstNum);
-          } else {
-            const firstNum = Math.floor(Math.random() * (maxFirst - minFirst + 1)) + minFirst;
-            numbers.unshift(firstNum);
-          }
-        } else {
-          // Negative answers allowed, generate normally
-          for (let i = 0; i < problemSet.numberCount; i++) {
-            const range = problemSet.numberRanges[i] || { min: 0, max: 10 };
-            const min = range.min;
-            const max = range.max;
-            const num = Math.floor(Math.random() * (max - min + 1)) + min;
-            numbers.push(num);
-          }
-        }
-      } else {
-        // For other operations (addition, multiplication), generate each number using its individual range
-        for (let i = 0; i < problemSet.numberCount; i++) {
-          const range = problemSet.numberRanges[i] || { min: 0, max: 10 };
-          const min = range.min;
-          const max = range.max;
-          const num = Math.floor(Math.random() * (max - min + 1)) + min;
-          numbers.push(num);
-        }
-      }
-      
-      // Calculate answer based on operation
-      let answer;
-      let expression;
-      
-      switch (problemSet.operation) {
-        case '+':
-          answer = numbers.reduce((a, b) => a + b, 0);
-          expression = numbers.join(' + ');
-          break;
-        case '-':
-          answer = numbers.reduce((a, b) => a - b);
-          expression = numbers.join(' - ');
-          break;
-        case '*':
-          answer = numbers.reduce((a, b) => a * b, 1);
-          expression = numbers.join(' × ');
-          break;
-        case '/':
-          // Calculate division: a ÷ b ÷ c = a / (b * c)
-          const divisors = numbers.slice(1);
-          const divisorProduct = divisors.reduce((a, b) => a * b, 1);
-          answer = numbers[0] / divisorProduct;
-          expression = `${numbers[0]} ÷ ${divisors.join(' ÷ ')}`;
-          break;
-      }
-      
-      // Use provided format or determine from session format
-      if (problemFormat === null) {
-        problemFormat = this.session.format;
-      }
-      
-      // Use provided display format or determine from session display format
-      if (problemDisplayFormat === null) {
-        problemDisplayFormat = this.session.displayFormat;
-      }
-      
-      // Generate wrong answers for multiple choice (only if this problem is multiple-choice)
-      const wrongAnswers = [];
-      if (problemFormat === 'multiple-choice') {
-        for (let i = 0; i < 3; i++) {
-          let wrong;
-          do {
-            wrong = answer + Math.floor(Math.random() * 20) - 10;
-          } while (wrong === answer || wrongAnswers.includes(wrong));
-          wrongAnswers.push(wrong);
-        }
-      }
-      
-      // Round answer based on decimal precision setting (for division) or default to 2 decimals
-      let roundedAnswer = answer;
-      if (problemSet.operation === '/' && problemSet.allowDecimalAnswers) {
-        const precision = Math.pow(10, problemSet.decimalPrecision || 2);
-        roundedAnswer = Math.round(answer * precision) / precision;
-      } else {
-        roundedAnswer = Math.round(answer * 100) / 100; // Default to 2 decimal places
-      }
-      
-      const problem = {
-        expression,
-        answer: roundedAnswer,
-        wrongAnswers,
-        format: problemFormat, // Store the format assigned to this problem
-        displayFormat: problemDisplayFormat, // Store the display format assigned to this problem
-        numbers: numbers, // Store numbers for stacked display
-        operation: problemSet.operation, // Store operation for stacked display
-        problemSet: problemSet,
-        problemSet: problemSet // Keep for backward compatibility
-      };
-      
-      return problem;
-    },
-    generateProblem() {
-      // Legacy method - just calls internal method and adds to array
-      this.problems.push(this.generateProblemInternal());
-    },
     handleAnswer(isCorrect) {
+      // Check if problem was already answered correctly before recording new answer
+      const wasAlreadyCorrect = this.answeredProblems[this.currentProblemIndex] === true;
+      
       // Record the answer for this problem
       this.answeredProblems[this.currentProblemIndex] = isCorrect;
       
       // Track previous emoji index to detect changes
       const previousEmojiIndex = this.currentEmojiIndex;
-      
-      // Update streak
+
       if (isCorrect) {
-        this.streak++;
         this.playCorrectSound();
+      } else {
+        this.playIncorrectSound();
+        this.streak = 0; // Reset streak on incorrect answer
+        this.emojiJustChanged = false; // Reset animation flag
+      }
+      
+      // Update streak - only increment if answer is correct AND problem wasn't already answered correctly
+      if (isCorrect && !wasAlreadyCorrect) {
+        this.streak++;
         
         // Check if emoji changed (crossed a multiple of 5 threshold)
         const newEmojiIndex = this.currentEmojiIndex;
@@ -775,10 +342,6 @@ const Study = {
             this.emojiJustChanged = false;
           }, 1000);
         }
-      } else {
-        this.streak = 0; // Reset streak on incorrect answer
-        this.emojiJustChanged = false; // Reset animation flag
-        this.playIncorrectSound();
       }
       
       this.showResult = true;
@@ -834,7 +397,6 @@ const Study = {
     const urlParams = new URLSearchParams(window.location.search);
     
     // Read session configuration from query params
-    const problemCount = urlParams.get('problemCount');
     const format = urlParams.get('format');
     const displayFormat = urlParams.get('displayFormat') || 'side-by-side';
     const problemSetsJson = urlParams.get('problemSets');
@@ -854,6 +416,10 @@ const Study = {
       
       // Ensure problem sets have their operation-specific options initialized
       problemSets.forEach(set => {
+        // Set default problemCount if not provided
+        if (set.problemCount === undefined) {
+          set.problemCount = 20;
+        }
         if (set.operation === '-') {
           if (set.allowNegative === undefined) {
             set.allowNegative = false;
@@ -870,8 +436,7 @@ const Study = {
       });
       
       this.session = {
-        problemCount: problemCount || 'all',
-        format: format || 'fill-in-blank',
+        answerFormat: format || 'fill-in-blank',
         displayFormat: displayFormat,
         problemSets: problemSets
       };
@@ -892,4 +457,5 @@ createApp({
   },
   template: '<Study />'
 }).mount('#app');
+
 
