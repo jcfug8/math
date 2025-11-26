@@ -75,6 +75,21 @@ createApp({
           }]
         },
         {
+          title: 'Addition 1000-9999',
+          description: 'Practice addition with numbers 1000-9999',
+          icon: '+',
+          format: 'fill-in-blank',
+          displayFormat: 'side-by-side',
+          problemSets: [{
+            operation: '+',
+            problemCount: 20,
+            numberRanges: [
+              { min: 1000, max: 9999 },
+              { min: 1000, max: 9999 }
+            ]
+          }]
+        },
+        {
           title: 'Subtraction 0-10',
           description: 'Practice subtraction with numbers 0-10',
           icon: '−',
